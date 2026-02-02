@@ -53,6 +53,9 @@ func main() {
 	if err := store.Migrate(ctx, "migrations/002_create_provider_attempts.sql"); err != nil {
 		log.Printf("Warning: Migration 002 failed: %v", err)
 	}
+	if err := store.Migrate(ctx, "migrations/003_add_unique_to_requests.sql"); err != nil {
+		log.Printf("Warning: Migration 003 failed: %v", err)
+	}
 
 	// 5. Initialize Rate Limiter
 	limiter, err := ratelimit.NewLimiter(cfg.RedisURL, cfg.TPM)

@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS requests (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    request_id TEXT NOT NULL,
+    request_id TEXT NOT NULL UNIQUE,
     tenant TEXT,
     use_case TEXT,
     route_name TEXT,

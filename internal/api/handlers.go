@@ -90,6 +90,14 @@ func (h *Handler) HandleChat(w http.ResponseWriter, r *http.Request) {
 	route := h.router.Route(useCase)
 	span.SetAttributes(attribute.String("route_name", route.Name))
 
+	// Ensure request row exists for attempts
+	h.usage.Log(ctx, usage.Record{
+		RequestID: requestID,
+		Tenant:    tenant,
+		UseCase:   useCase,
+		RouteName: route.Name,
+	})
+
 	// Attempt coordination
 	var lastErr error
 

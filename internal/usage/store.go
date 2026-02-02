@@ -48,10 +48,23 @@ func NewStore(connString string) (*Store, error) {
 func (s *Store) Log(ctx context.Context, r Record) error {
 	cost := EstimateCost(r.Model, r.PromptTokens, r.CompletionTokens)
 
-	// Get internal request ID from correlation ID
-	var reqID string
-	err := s.db.QueryRow(ctx, "INSERT INTO requests (request_id, tenant, use_case, route_name, provider, model, prompt_tokens, completion_tokens, total_tokens, cost_estimate_usd, latency_ms, status_code, error_message) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id",
-		r.RequestID, r.Tenant, r.UseCase, r.RouteName, r.Provider, r.Model, r.PromptTokens, r.CompletionTokens, r.TotalTokens, cost, r.LatencyMS, r.StatusCode, r.ErrorMessage).Scan(&reqID)
+	_, err := s.db.Exec(ctx, `
+		INSERT INTO requests (request_id, tenant, use_case, route_name, provider, model, prompt_tokens, completion_tokens, total_tokens, cost_estimate_usd, latency_ms, status_code, error_message)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+		ON CONFLICT (request_id) DO UPDATE SET
+			tenant = EXCLUDED.tenant,
+			use_case = EXCLUDED.use_case,
+			route_name = EXCLUDED.route_name,
+			provider = EXCLUDED.provider,
+			model = EXCLUDED.model,
+			prompt_tokens = EXCLUDED.prompt_tokens,
+			completion_tokens = EXCLUDED.completion_tokens,
+			total_tokens = EXCLUDED.total_tokens,
+			cost_estimate_usd = EXCLUDED.cost_estimate_usd,
+			latency_ms = EXCLUDED.latency_ms,
+			status_code = EXCLUDED.status_code,
+			error_message = EXCLUDED.error_message
+	`, r.RequestID, r.Tenant, r.UseCase, r.RouteName, r.Provider, r.Model, r.PromptTokens, r.CompletionTokens, r.TotalTokens, cost, r.LatencyMS, r.StatusCode, r.ErrorMessage)
 	return err
 }
 
