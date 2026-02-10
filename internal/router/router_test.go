@@ -1,6 +1,7 @@
 package router
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/yewintnaing/ai-gateway/internal/config"
@@ -50,6 +51,7 @@ func TestRouter_Route(t *testing.T) {
 }
 
 func TestIsRetryable(t *testing.T) {
+	// Test StatusCodeIsRetryable
 	if !StatusCodeIsRetryable(500) {
 		t.Error("expected 500 to be retryable")
 	}
@@ -59,4 +61,19 @@ func TestIsRetryable(t *testing.T) {
 	if StatusCodeIsRetryable(400) {
 		t.Error("expected 400 to NOT be retryable")
 	}
+
+	// Test IsRetryable - only network errors are retryable
+	t.Run("Non-network errors should not be retryable", func(t *testing.T) {
+		err := fmt.Errorf("anthropic API error: 400 - insufficient credits")
+		if IsRetryable(err) {
+			t.Error("expected API error to NOT be retryable")
+		}
+	})
+
+	t.Run("Unknown errors should not be retryable", func(t *testing.T) {
+		err := fmt.Errorf("some unknown error")
+		if IsRetryable(err) {
+			t.Error("expected unknown error to NOT be retryable")
+		}
+	})
 }

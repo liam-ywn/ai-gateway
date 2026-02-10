@@ -13,14 +13,18 @@ import (
 )
 
 type Provider struct {
-	apiKey string
-	client *http.Client
+	apiKey  string
+	baseURL string
+	version string
+	client  *http.Client
 }
 
-func NewProvider(apiKey string) *Provider {
+func NewProvider(apiKey string, baseURL string, version string) *Provider {
 	return &Provider{
-		apiKey: apiKey,
-		client: &http.Client{Timeout: 30 * time.Second},
+		apiKey:  apiKey,
+		baseURL: baseURL,
+		version: version,
+		client:  &http.Client{Timeout: 30 * time.Second},
 	}
 }
 
@@ -62,7 +66,7 @@ func (p *Provider) Chat(req providers.ChatRequest) (*providers.ChatResponse, err
 		return nil, err
 	}
 
-	httpReq, err := http.NewRequest("POST", "https://api.openai.com/v1/chat/completions", bytes.NewBuffer(body))
+	httpReq, err := http.NewRequest("POST", p.baseURL+"/chat/completions", bytes.NewBuffer(body))
 	if err != nil {
 		return nil, err
 	}

@@ -25,7 +25,7 @@ routes:
     match:
       use_case: default
     primary:
-      provider: openai
-      model: gpt-4o-mini
+      provider: anthropic
+      model: claude-opus-4
     timeout_ms: 15000
     retries: 1

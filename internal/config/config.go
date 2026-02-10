@@ -8,13 +8,17 @@ import (
 )
 
 type Config struct {
-	Port         string
-	DatabaseURL  string
-	OpenAIKey    string
-	AnthropicKey string
-	RedisURL     string
-	TPM          int
-	Routes       []Route
+	Port             string
+	DatabaseURL      string
+	OpenAIKey        string
+	OpenAIURL        string
+	OpenAIVersion    string
+	AnthropicKey     string
+	AnthropicURL     string
+	AnthropicVersion string
+	RedisURL         string
+	TPM              int
+	Routes           []Route
 }
 
 type Target struct {
@@ -37,12 +41,16 @@ type Match struct {
 
 func LoadConfig() (*Config, error) {
 	cfg := &Config{
-		Port:         getEnv("PORT", "8080"),
-		DatabaseURL:  getEnv("DATABASE_URL", "postgres://postgres:postgres@postgres:5432/aigw?sslmode=disable"),
-		OpenAIKey:    os.Getenv("OPENAI_API_KEY"),
-		AnthropicKey: os.Getenv("ANTHROPIC_API_KEY"),
-		RedisURL:     getEnv("REDIS_URL", "redis://localhost:6379/0"),
-		TPM:          getTPM(),
+		Port:             getEnv("PORT", "8080"),
+		DatabaseURL:      getEnv("DATABASE_URL", "postgres://postgres:postgres@postgres:5432/aigw?sslmode=disable"),
+		OpenAIKey:        os.Getenv("OPENAI_API_KEY"),
+		OpenAIURL:        getEnv("OPENAI_API_URL", "https://api.openai.com/v1"),
+		OpenAIVersion:    getEnv("OPENAI_API_VERSION", "v1"),
+		AnthropicKey:     os.Getenv("ANTHROPIC_API_KEY"),
+		AnthropicURL:     getEnv("ANTHROPIC_API_URL", "https://api.anthropic.com/v1"),
+		AnthropicVersion: getEnv("ANTHROPIC_API_VERSION", "2023-06-01"),
+		RedisURL:         getEnv("REDIS_URL", "redis://localhost:6379/0"),
+		TPM:              getTPM(),
 	}
 
 	routesPath := getEnv("ROUTES_CONFIG", "configs/routes.yaml")

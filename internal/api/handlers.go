@@ -171,12 +171,11 @@ func (h *Handler) HandleChat(w http.ResponseWriter, r *http.Request) {
 			attemptNo++
 
 			if !router.IsRetryable(err) {
-				goto fail
+				logError(requestID, "non-retryable error", err)
+				break
 			}
 		}
 	}
-
-fail:
 	h.respondError(w, http.StatusBadGateway, lastErr.Error(), requestID)
 }
 

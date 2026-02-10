@@ -10,8 +10,8 @@ Production-grade AI Gateway in Go with streaming, fallback routing, rate limitin
 - **Observability**: OpenTelemetry tracing and metrics.
 
 ## Implementation Status
-- **OpenAI**: Fully implemented (including streaming).
-- **Anthropic**: **Not implemented yet** (mock support only).
+- **OpenAI**: ✅ Fully implemented (including streaming)
+- **Anthropic**: ✅ Fully implemented (including streaming)
 
 ## Pending Features
 - **Governed**: Advanced policy enforcement and security auditing.
@@ -20,10 +20,30 @@ Production-grade AI Gateway in Go with streaming, fallback routing, rate limitin
 
 ## Setup & Running
 
-### 1. Configure Keys
+### 1. Configure Environment Variables
+
+**Option A: Interactive Setup (Recommended)**
 ```bash
-export OPENAI_API_KEY=mock
-export ANTHROPIC_API_KEY=mock # (anthropic provider is not implemented yet)
+./setup-env.sh
+```
+This will:
+- Create a `.env` file from `.env.example`
+- Prompt you for your API keys
+- Set up default configurations
+
+**Option B: Manual Setup**
+```bash
+# Copy the example file
+cp .env.example .env
+
+# Edit .env and add your API keys
+nano .env
+```
+
+**Option C: Export directly (for testing)**
+```bash
+export OPENAI_API_KEY=your-key-here
+export ANTHROPIC_API_KEY=your-key-here
 ```
 
 ### 2. Run Infrastructure

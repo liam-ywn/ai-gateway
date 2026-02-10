@@ -65,8 +65,8 @@ func main() {
 
 	// 6. Initialize Providers
 	registry := providers.Registry{
-		"openai":    openai.NewProvider(cfg.OpenAIKey),
-		"anthropic": anthropic.NewProvider(cfg.AnthropicKey),
+		"openai":    openai.NewProvider(cfg.OpenAIKey, cfg.OpenAIURL, cfg.OpenAIVersion),
+		"anthropic": anthropic.NewProvider(cfg.AnthropicKey, cfg.AnthropicURL, cfg.AnthropicVersion),
 	}
 
 	// 7. Initialize Components

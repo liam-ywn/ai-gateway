@@ -1,7 +1,11 @@
 package anthropic
 
 import (
+	"bufio"
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -10,14 +14,18 @@ import (
 )
 
 type Provider struct {
-	apiKey string
-	client *http.Client
+	apiKey  string
+	baseURL string
+	version string
+	client  *http.Client
 }
 
-func NewProvider(apiKey string) *Provider {
+func NewProvider(apiKey string, baseURL string, version string) *Provider {
 	return &Provider{
-		apiKey: apiKey,
-		client: &http.Client{Timeout: 30 * time.Second},
+		apiKey:  apiKey,
+		baseURL: baseURL,
+		version: version,
+		client:  &http.Client{Timeout: 30 * time.Second},
 	}
 }
 
@@ -54,7 +62,38 @@ func (p *Provider) Chat(req providers.ChatRequest) (*providers.ChatResponse, err
 		}, nil
 	}
 
-	return nil, fmt.Errorf("anthropic real API call not implemented in MVP (use mock)")
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, err
+	}
+
+	httpReq, err := http.NewRequest("POST", p.baseURL+"/messages", bytes.NewBuffer(body))
+	if err != nil {
+		return nil, err
+	}
+
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("X-API-Key", p.apiKey)
+	httpReq.Header.Set("Anthropic-Version", p.version)
+
+	resp, err := p.client.Do(httpReq)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("anthropic API error: %d - %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var chatResponse providers.AnthropicResponse
+	if err := json.NewDecoder(resp.Body).Decode(&chatResponse); err != nil {
+		return nil, err
+	}
+
+	return chatResponse.ToChatResponse(), nil
+
 }
 
 func (p *Provider) ChatStream(req providers.ChatRequest) (<-chan providers.ChatChunk, <-chan error) {
@@ -114,6 +153,163 @@ func (p *Provider) ChatStream(req providers.ChatRequest) (<-chan providers.ChatC
 		return chunkCh, errCh
 	}
 
-	errCh <- fmt.Errorf("anthropic real streaming not implemented")
+	req.Stream = true
+	body, err := json.Marshal(req)
+	if err != nil {
+		errCh <- err
+		return chunkCh, errCh
+	}
+
+	go func() {
+		defer close(chunkCh)
+		defer close(errCh)
+
+		httpReq, err := http.NewRequest("POST", "https://api.anthropic.com/v1/messages", bytes.NewBuffer(body))
+		if err != nil {
+			errCh <- err
+			return
+		}
+
+		httpReq.Header.Set("Content-Type", "application/json")
+		httpReq.Header.Set("X-API-Key", p.apiKey)
+		httpReq.Header.Set("Anthropic-Version", p.version)
+
+		resp, err := p.client.Do(httpReq)
+		if err != nil {
+			errCh <- err
+			return
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			var errData map[string]interface{}
+			json.NewDecoder(resp.Body).Decode(&errData)
+			errCh <- fmt.Errorf("anthropic streaming error (status %d): %v", resp.StatusCode, errData)
+			return
+		}
+
+		// Parse SSE stream
+		reader := bufio.NewReader(resp.Body)
+		var messageID string
+		var model string
+		var created int64
+
+		for {
+			line, err := reader.ReadString('\n')
+			if err != nil {
+				break
+			}
+
+			line = strings.TrimSpace(line)
+			if line == "" {
+				continue
+			}
+
+			// Parse event type
+			var eventType string
+			var eventData string
+
+			if after, ok := strings.CutPrefix(line, "event: "); ok {
+				eventType = after
+				// Read the next line for data
+				dataLine, err := reader.ReadString('\n')
+				if err != nil {
+					break
+				}
+				if after, ok := strings.CutPrefix(dataLine, "data: "); ok {
+					eventData = after
+				}
+			} else {
+				continue
+			}
+
+			// Handle different event types
+			switch eventType {
+			case "message_start":
+				var msgStart providers.AnthropicMessageStart
+				if err := json.Unmarshal([]byte(eventData), &msgStart); err != nil {
+					continue
+				}
+				messageID = msgStart.Message.ID
+				model = msgStart.Message.Model
+				created = time.Now().Unix()
+
+			case "content_block_delta":
+				var delta providers.AnthropicContentBlockDelta
+				if err := json.Unmarshal([]byte(eventData), &delta); err != nil {
+					continue
+				}
+
+				// Only process text deltas
+				if delta.Delta.Type == "text_delta" {
+					chunkCh <- providers.ChatChunk{
+						ID:      messageID,
+						Object:  "chat.completion.chunk",
+						Created: created,
+						Model:   model,
+						Choices: []struct {
+							Index int `json:"index"`
+							Delta struct {
+								Content string `json:"content"`
+							} `json:"delta"`
+							FinishReason string `json:"finish_reason"`
+						}{
+							{
+								Index: delta.Index,
+								Delta: struct {
+									Content string `json:"content"`
+								}{Content: delta.Delta.Text},
+							},
+						},
+					}
+				}
+
+			case "message_delta":
+				var msgDelta providers.AnthropicMessageDelta
+				if err := json.Unmarshal([]byte(eventData), &msgDelta); err != nil {
+					continue
+				}
+
+				// Send final chunk with finish_reason
+				if msgDelta.Delta.StopReason != "" {
+					chunkCh <- providers.ChatChunk{
+						ID:      messageID,
+						Object:  "chat.completion.chunk",
+						Created: created,
+						Model:   model,
+						Choices: []struct {
+							Index int `json:"index"`
+							Delta struct {
+								Content string `json:"content"`
+							} `json:"delta"`
+							FinishReason string `json:"finish_reason"`
+						}{
+							{
+								Index:        0,
+								FinishReason: msgDelta.Delta.StopReason,
+							},
+						},
+					}
+				}
+
+			case "message_stop":
+				// Stream complete
+				return
+
+			case "ping":
+				// Ignore ping events
+				continue
+
+			case "error":
+				// Handle error events
+				var errEvent map[string]interface{}
+				if err := json.Unmarshal([]byte(eventData), &errEvent); err == nil {
+					errCh <- fmt.Errorf("anthropic stream error: %v", errEvent)
+				}
+				return
+			}
+		}
+	}()
+
 	return chunkCh, errCh
 }
